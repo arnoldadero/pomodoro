@@ -1,0 +1,44 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foreground-rgb: 0, 0, 0;
+  --background-start-rgb: 214, 219, 220;
+  --background-end-rgb: 255, 255, 255;
+}
+
+.dark {
+  --foreground-rgb: 255, 255, 255;
+  --background-start-rgb: 0, 0, 0;
+  --background-end-rgb: 0, 0, 0;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: linear-gradient(
+    to bottom right,
+    rgb(var(--background-start-rgb)),
+    rgb(var(--background-end-rgb))
+  );
+  min-height: 100vh;
+}
+
+/* Ensure proper contrast for timer elements */
+.dark .bg-white {
+  background-color: rgb(31, 41, 55); /* dark:bg-gray-800 equivalent */
+}
+
+/* Improve button contrast in dark mode */
+.dark button:not([class*="bg-"]) {
+  background-color: rgb(55, 65, 81); /* dark:bg-gray-700 equivalent */
+}
+
+/* Ensure proper text contrast */
+.dark .text-gray-800 {
+  color: rgb(229, 231, 235); /* dark:text-gray-200 equivalent */
+}
