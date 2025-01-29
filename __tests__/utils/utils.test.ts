@@ -30,21 +30,26 @@ describe('formatTime', () => {
 })
 
 describe('formatDate', () => {
-  beforeAll(() => {
-    // Mock toLocaleDateString to ensure consistent output
-    const mockDate = new Date('2024-01-28T09:00:00')
+  beforeEach(() => {
     jest.spyOn(Date.prototype, 'toLocaleDateString').mockImplementation(function(this: Date) {
-      return mockDate.toLocaleDateString('en-US', {
-        weekday: 'short',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      })
+      const locales = arguments[0]
+      const options = arguments[1] as Intl.DateTimeFormatOptions | undefined
+
+      if (
+        locales === 'en-US' &&
+        options?.weekday === 'short' &&
+        options?.month === 'short' &&
+        options?.day === 'numeric' &&
+        options?.hour === '2-digit' &&
+        options?.minute === '2-digit'
+      ) {
+        return 'Sun, Jan 28, 09:00 AM'
+      }
+      return this.toLocaleDateString()
     })
   })
 
-  afterAll(() => {
+  afterEach(() => {
     jest.restoreAllMocks()
   })
 
@@ -58,6 +63,14 @@ describe('formatDate', () => {
 
   it('should format Date object', () => {
     expect(formatDate(new Date('2024-01-28T09:00:00'))).toBe('Sun, Jan 28, 09:00 AM')
+  })
+
+  it('should handle invalid date strings', () => {
+    expect(formatDate('invalid-date')).toBe('Invalid date format')
+  })
+
+  it('should handle invalid Date objects', () => {
+    expect(formatDate(new Date('invalid'))).toBe('Invalid date format')
   })
 })
 
@@ -81,12 +94,23 @@ describe('createCalendarUrl', () => {
     expect(createCalendarUrl(taskWithoutDeadline)).toBe('#')
   })
 
+  it('should handle invalid deadline dates', () => {
+    const taskWithInvalidDeadline = { ...mockTask, deadline: 'invalid-date' }
+    expect(createCalendarUrl(taskWithInvalidDeadline)).toBe('#')
+  })
+
   it('should create valid calendar URL', () => {
     const url = createCalendarUrl(mockTask)
     expect(url).toContain('calendar.google.com/calendar/render')
     expect(url).toContain(encodeURIComponent(mockTask.name))
     expect(url).toContain(encodeURIComponent(`Pomodoros: ${mockTask.estimatedPomos}`))
     expect(url).toContain(encodeURIComponent(mockTask.description))
+  })
+
+  it('should handle empty description', () => {
+    const taskWithoutDescription = { ...mockTask, description: '' }
+    const url = createCalendarUrl(taskWithoutDescription)
+    expect(url).toContain(encodeURIComponent(`Pomodoros: ${mockTask.estimatedPomos}\n`))
   })
 
   it('should set end time 30 minutes after start time', () => {
@@ -170,34 +194,53 @@ describe('safeLocalStorage', () => {
     localStorage.clear()
   })
 
-  it('should get and set items safely', () => {
-    storage.setItem('test', mockData)
-    expect(storage.getItem('test', null)).toEqual(mockData)
+  describe('getItem', () => {
+    it('should get items safely', () => {
+      storage.setItem('test', mockData)
+      expect(storage.getItem('test', null)).toEqual(mockData)
+    })
+
+    it('should return default value when item not found', () => {
+      expect(storage.getItem('nonexistent', 'default')).toBe('default')
+    })
+
+    it('should handle invalid JSON data', () => {
+      localStorage.setItem('invalid', 'invalid-json')
+      expect(storage.getItem('invalid', 'default')).toBe('default')
+      expect(console.error).toHaveBeenCalledWith('Error parsing localStorage item:', expect.any(Error))
+    })
   })
 
-  it('should return default value when item not found', () => {
-    expect(storage.getItem('nonexistent', 'default')).toBe('default')
+  describe('setItem', () => {
+    it('should handle localStorage errors', () => {
+      jest.spyOn(localStorage, 'setItem').mockImplementation(() => {
+        throw mockError
+      })
+      storage.setItem('test', mockData)
+      expect(console.error).toHaveBeenCalledWith('Error writing to localStorage:', mockError)
+    })
+
+    it('should handle non-string keys', () => {
+      // @ts-expect-error Testing invalid key type
+      storage.setItem(123, mockData)
+      expect(console.error).toHaveBeenCalledWith('Invalid key type:', 'number')
+    })
   })
 
-  it('should handle localStorage errors', () => {
-    jest.spyOn(localStorage, 'getItem').mockImplementation(() => {
-      throw mockError
-    })
-    jest.spyOn(localStorage, 'setItem').mockImplementation(() => {
-      throw mockError
-    })
-    jest.spyOn(localStorage, 'removeItem').mockImplementation(() => {
-      throw mockError
+  describe('removeItem', () => {
+    it('should handle localStorage errors', () => {
+      jest.spyOn(localStorage, 'removeItem').mockImplementation(() => {
+        throw mockError
+      })
+      storage.removeItem('test')
+      expect(console.error).toHaveBeenCalledWith('Error removing from localStorage:', mockError)
     })
 
-    storage.setItem('test', mockData)
-    expect(console.error).toHaveBeenCalledWith('Error writing to localStorage:', mockError)
-
-    storage.getItem('test', null)
-    expect(console.error).toHaveBeenCalledWith('Error reading from localStorage:', mockError)
-
-    storage.removeItem('test')
-    expect(console.error).toHaveBeenCalledWith('Error removing from localStorage:', mockError)
+    it('should handle non-string keys', () => {
+      // @ts-expect-error Testing invalid key type
+      storage.removeItem(123)
+      expect(console.error).toHaveBeenCalledWith('Invalid key type:', 'number')
+    })
   })
 })
 
@@ -240,21 +283,29 @@ describe('notifications', () => {
 
   describe('showNotification', () => {
     let originalNotification: typeof Notification
+    let mockNotification: jest.Mock
 
     beforeAll(() => {
       originalNotification = window.Notification
+    })
+
+    beforeEach(() => {
+      mockNotification = jest.fn()
     })
 
     afterAll(() => {
       window.Notification = originalNotification
     })
 
+    afterEach(() => {
+      mockNotification.mockClear()
+    })
+
     it('should show notification when permission is granted', () => {
-      const mockNotification = jest.fn()
       Object.defineProperty(window, 'Notification', {
         value: class {
           static permission = 'granted'
-          constructor(public title: string, public options?: NotificationOptions) {
+          constructor(title: string, options?: NotificationOptions) {
             mockNotification(title, options)
           }
         },
@@ -266,11 +317,10 @@ describe('notifications', () => {
     })
 
     it('should not show notification when permission is denied', () => {
-      const mockNotification = jest.fn()
       Object.defineProperty(window, 'Notification', {
         value: class {
           static permission = 'denied'
-          constructor(public title: string, public options?: NotificationOptions) {
+          constructor(title: string, options?: NotificationOptions) {
             mockNotification(title, options)
           }
         },

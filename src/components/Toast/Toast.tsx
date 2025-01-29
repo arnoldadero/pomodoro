@@ -23,17 +23,19 @@ export function Toast({ id, message, type = 'error', onClose }: ToastProps) {
   return (
     <div
       role="alert"
-      className={`fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg transition-all duration-300 ${typeStyles[type]}`}
+      className={`w-full p-4 rounded-lg shadow-lg ${typeStyles[type]}`}
       aria-live="assertive"
+      data-testid={`toast-${id}`}
     >
       <div className="flex items-center">
         <span className="mr-4">{message}</span>
         <button
           onClick={() => onClose(id)}
-          className="ml-auto focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-white rounded-full p-1"
+          className="ml-auto focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-white rounded-full p-1 hover:opacity-80"
           aria-label="Close notification"
+          type="button"
         >
-          <span aria-hidden="true">✕</span>
+          <span aria-hidden="true" className="text-lg">✕</span>
         </button>
       </div>
     </div>

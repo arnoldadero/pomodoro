@@ -1,3 +1,5 @@
+'use client'
+
 import { useRef, useEffect, useCallback } from 'react'
 import { useSettingsStore } from '../store/settingsStore'
 
@@ -11,8 +13,11 @@ export function useAudio({ src, loop = false }: UseAudioProps) {
   const volume = useSettingsStore((state) => state.volume)
 
   useEffect(() => {
-    audioRef.current = new Audio(src)
-    audioRef.current.loop = loop
+    // Only create Audio instance on client-side
+    if (typeof window !== 'undefined') {
+      audioRef.current = new Audio(src)
+      audioRef.current.loop = loop
+    }
 
     return () => {
       if (audioRef.current) {

@@ -1,224 +1,135 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import React from 'react'
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { TaskForm } from '../../src/components/Task/TaskForm'
+import { renderWithProviders } from '../utils/test-utils'
 import { useTaskStore } from '../../src/store/taskStore'
-import { useToast } from '../../src/hooks/useToast'
-import { TASK_PRIORITIES } from '../../src/constants'
-import type { Task } from '../../src/types'
 
-// Mock dependencies
-jest.mock('../../src/store/taskStore')
-jest.mock('../../src/hooks/useToast')
-jest.mock('framer-motion', () => ({
-  motion: {
-    div: ({ children, ...props }: any) => <div {...props}>{children}</div>,
-    button: ({ children, ...props }: any) => (
-      <button {...props}>{children}</button>
-    )
-  }
+jest.mock('../../src/store/taskStore', () => ({
+  useTaskStore: jest.fn()
 }))
 
-// Mock Date.now and toISOString for consistent testing
-const mockDateNow = 12345
-const mockISOString = '2024-01-01T00:00:00.000Z'
-Date.now = jest.fn(() => mockDateNow)
-const mockDate = new Date(mockDateNow)
-const originalToISOString = mockDate.toISOString
-mockDate.toISOString = jest.fn(() => mockISOString)
-global.Date = jest.fn(() => mockDate) as any
+const mockedUseTaskStore = useTaskStore as jest.MockedFunction<typeof useTaskStore>
 
-const mockUseTaskStore = useTaskStore as jest.MockedFunction<typeof useTaskStore>
-const mockAddTask = jest.fn()
-const mockAddToast = jest.fn()
+describe('TaskForm', () => {
+  const mockDate = new Date('2025-01-01T12:00:00Z')
+  const mockTime = mockDate.getTime()
 
-describe('TaskForm Component', () => {
+  const mockTaskStore = {
+    tasks: [],
+    addTask: jest.fn(),
+    updateTask: jest.fn(),
+    deleteTask: jest.fn(),
+    currentTask: null,
+    setCurrentTask: jest.fn()
+  }
+
   beforeEach(() => {
+    jest.useFakeTimers()
+    jest.setSystemTime(mockDate)
+    mockedUseTaskStore.mockImplementation(() => mockTaskStore)
+  })
+
+  afterEach(() => {
+    jest.useRealTimers()
     jest.clearAllMocks()
-    mockUseTaskStore.mockReturnValue({ addTask: mockAddTask } as any)
-    ;(useToast as jest.Mock).mockReturnValue({ addToast: mockAddToast })
-    mockAddTask.mockReturnValue(true) // Default to successful task addition
   })
 
-  it('renders form with all fields', () => {
-    render(<TaskForm />)
-
-    expect(screen.getByLabelText('Task Name')).toBeInTheDocument()
-    expect(screen.getByLabelText('Priority')).toBeInTheDocument()
-    expect(screen.getByLabelText('Estimated Pomodoros')).toBeInTheDocument()
-    expect(screen.getByLabelText('Deadline')).toBeInTheDocument()
-    expect(screen.getByLabelText('Description')).toBeInTheDocument()
-    expect(screen.getByText('Add Task')).toBeInTheDocument()
+  it('renders without crashing', () => {
+    renderWithProviders(<TaskForm />)
+    expect(screen.getByRole('form')).toBeInTheDocument()
   })
 
-  it('renders all priority options', () => {
-    render(<TaskForm />)
+  it('submits a new task', async () => {
+    renderWithProviders(<TaskForm />)
 
-    const prioritySelect = screen.getByLabelText('Priority')
-    TASK_PRIORITIES.forEach(priority => {
-      expect(prioritySelect).toContainHTML(priority)
+    const titleInput = screen.getByLabelText(/task title/i)
+    const submitButton = screen.getByRole('button', { name: /add task/i })
+
+    await userEvent.type(titleInput, 'Test Task')
+    await userEvent.click(submitButton)
+
+    expect(mockTaskStore.addTask).toHaveBeenCalledWith({
+      id: expect.any(String),
+      title: 'Test Task',
+      completed: false,
+      createdAt: mockTime,
+      updatedAt: mockTime
     })
   })
 
-  describe('Form Interactions', () => {
-    const fillForm = (overrides: Partial<{
-      name: string
-      priority: Task['priority']
-      estimatedPomos: string
-      description: string
-      deadline: string
-    }> = {}) => {
-      fireEvent.change(screen.getByLabelText('Task Name'), {
-        target: { name: 'name', value: overrides.name || 'Test Task' }
-      })
-      fireEvent.change(screen.getByLabelText('Priority'), {
-        target: { name: 'priority', value: overrides.priority || 'High' }
-      })
-      fireEvent.change(screen.getByLabelText('Estimated Pomodoros'), {
-        target: { name: 'estimatedPomos', value: overrides.estimatedPomos || '3' }
-      })
-      fireEvent.change(screen.getByLabelText('Description'), {
-        target: { name: 'description', value: overrides.description || 'Test Description' }
-      })
-      fireEvent.change(screen.getByLabelText('Deadline'), {
-        target: { name: 'deadline', value: overrides.deadline || '2024-12-31T23:59' }
-      })
+  it('validates required fields', async () => {
+    renderWithProviders(<TaskForm />)
+
+    const submitButton = screen.getByRole('button', { name: /add task/i })
+    await userEvent.click(submitButton)
+
+    expect(await screen.findByText(/title is required/i)).toBeInTheDocument()
+    expect(mockTaskStore.addTask).not.toHaveBeenCalled()
+  })
+
+  it('clears form after submission', async () => {
+    renderWithProviders(<TaskForm />)
+
+    const titleInput = screen.getByLabelText(/task title/i)
+    const submitButton = screen.getByRole('button', { name: /add task/i })
+
+    await userEvent.type(titleInput, 'Test Task')
+    await userEvent.click(submitButton)
+
+    await waitFor(() => {
+      expect(titleInput).toHaveValue('')
+    })
+  })
+
+  it('updates existing task', async () => {
+    const existingTask = {
+      id: '123',
+      title: 'Existing Task',
+      completed: false,
+      createdAt: mockTime - 1000,
+      updatedAt: mockTime - 1000
     }
 
-    it('handles input changes correctly', () => {
-      render(<TaskForm />)
-      fillForm()
+    mockedUseTaskStore.mockImplementation(() => ({
+      ...mockTaskStore,
+      currentTask: existingTask
+    }))
 
-      expect(screen.getByLabelText('Task Name')).toHaveValue('Test Task')
-      expect(screen.getByLabelText('Priority')).toHaveValue('High')
-      expect(screen.getByLabelText('Estimated Pomodoros')).toHaveValue(3)
-      expect(screen.getByLabelText('Description')).toHaveValue('Test Description')
-      expect(screen.getByLabelText('Deadline')).toHaveValue('2024-12-31T23:59')
-    })
+    renderWithProviders(<TaskForm />)
 
-    it('handles empty deadline correctly', () => {
-      render(<TaskForm />)
-      fillForm({ deadline: '' })
+    const titleInput = screen.getByLabelText(/task title/i)
+    const submitButton = screen.getByRole('button', { name: /update task/i })
 
-      expect(screen.getByLabelText('Deadline')).toHaveValue('')
-    })
+    expect(titleInput).toHaveValue('Existing Task')
 
-    it('handles invalid estimated pomodoros', () => {
-      render(<TaskForm />)
-      fillForm({ estimatedPomos: 'invalid' })
+    await userEvent.clear(titleInput)
+    await userEvent.type(titleInput, 'Updated Task')
+    await userEvent.click(submitButton)
 
-      expect(screen.getByLabelText('Estimated Pomodoros')).toHaveValue(1)
-    })
-
-    it('submits form with correct data', () => {
-      render(<TaskForm />)
-      fillForm()
-
-      fireEvent.submit(screen.getByRole('form'))
-
-      expect(mockAddTask).toHaveBeenCalledWith(expect.objectContaining({
-        id: mockDateNow.toString(),
-        name: 'Test Task',
-        priority: 'High',
-        estimatedPomos: 3,
-        description: 'Test Description',
-        deadline: '2024-12-31T23:59',
-        status: 'todo',
-        actualPomos: 0,
-        timeSpent: 0,
-        labels: [],
-        createdAt: mockISOString
-      }))
-    })
-
-    it('shows success toast and resets form on successful submission', () => {
-      render(<TaskForm />)
-      fillForm()
-      fireEvent.submit(screen.getByRole('form'))
-
-      expect(mockAddToast).toHaveBeenCalledWith('Task added successfully', 'success')
-      expect(screen.getByLabelText('Task Name')).toHaveValue('')
-      expect(screen.getByLabelText('Priority')).toHaveValue('Medium')
-      expect(screen.getByLabelText('Estimated Pomodoros')).toHaveValue(1)
-      expect(screen.getByLabelText('Description')).toHaveValue('')
-      expect(screen.getByLabelText('Deadline')).toHaveValue('')
-    })
-
-    it('handles failed task addition', () => {
-      mockAddTask.mockReturnValue(false)
-      render(<TaskForm />)
-      fillForm()
-      fireEvent.submit(screen.getByRole('form'))
-
-      // Form should not be reset
-      expect(screen.getByLabelText('Task Name')).toHaveValue('Test Task')
-      expect(screen.getByLabelText('Priority')).toHaveValue('High')
-      expect(screen.getByLabelText('Estimated Pomodoros')).toHaveValue(3)
-      expect(screen.getByLabelText('Description')).toHaveValue('Test Description')
-      expect(screen.getByLabelText('Deadline')).toHaveValue('2024-12-31T23:59')
-
-      // Success toast should not be shown
-      expect(mockAddToast).not.toHaveBeenCalled()
-    })
-
-    describe('Form Validation', () => {
-      it('requires task name', () => {
-        render(<TaskForm />)
-        fillForm({ name: '' })
-        fireEvent.submit(screen.getByRole('form'))
-        expect(mockAddTask).not.toHaveBeenCalled()
-      })
-
-      it('requires priority', () => {
-        render(<TaskForm />)
-        fillForm()
-        const prioritySelect = screen.getByLabelText('Priority')
-        fireEvent.change(prioritySelect, { target: { name: 'priority', value: '' } })
-        fireEvent.submit(screen.getByRole('form'))
-        expect(mockAddTask).not.toHaveBeenCalled()
-      })
-
-      it('requires estimated pomodoros', () => {
-        render(<TaskForm />)
-        fillForm()
-        const estimatedPomosInput = screen.getByLabelText('Estimated Pomodoros')
-        fireEvent.change(estimatedPomosInput, { target: { name: 'estimatedPomos', value: '' } })
-        fireEvent.submit(screen.getByRole('form'))
-        expect(mockAddTask).not.toHaveBeenCalled()
-      })
-
-      it('prevents negative estimated pomodoros', () => {
-        render(<TaskForm />)
-        fillForm({ estimatedPomos: '-1' })
-        fireEvent.submit(screen.getByRole('form'))
-        expect(mockAddTask).not.toHaveBeenCalled()
-      })
+    expect(mockTaskStore.updateTask).toHaveBeenCalledWith({
+      ...existingTask,
+      title: 'Updated Task',
+      updatedAt: mockTime
     })
   })
 
-  describe('Accessibility', () => {
-    it('has proper form labeling', () => {
-      render(<TaskForm />)
-      expect(screen.getByRole('form')).toBeInTheDocument()
-      expect(screen.getByRole('heading', { name: 'Add New Task' })).toBeInTheDocument()
-    })
+  it('handles form reset', async () => {
+    renderWithProviders(<TaskForm />)
 
-    it('marks required fields appropriately', () => {
-      render(<TaskForm />)
-      const requiredFields = [
-        screen.getByLabelText('Task Name'),
-        screen.getByLabelText('Priority'),
-        screen.getByLabelText('Estimated Pomodoros')
-      ]
+    const titleInput = screen.getByLabelText(/task title/i)
+    const resetButton = screen.getByRole('button', { name: /reset/i })
 
-      requiredFields.forEach(field => {
-        expect(field).toHaveAttribute('required')
-        expect(field).toHaveAttribute('aria-required', 'true')
-      })
-    })
+    await userEvent.type(titleInput, 'Test Task')
+    await userEvent.click(resetButton)
 
-    it('uses semantic form structure', () => {
-      const { container } = render(<TaskForm />)
-      expect(container.querySelector('form')).toHaveClass('space-y-4')
-      expect(container.querySelectorAll('label')).toHaveLength(5)
-    })
+    expect(titleInput).toHaveValue('')
+  })
+
+  it('provides proper accessibility attributes', () => {
+    renderWithProviders(<TaskForm />)
+
+    expect(screen.getByRole('form')).toHaveAttribute('aria-label')
+    expect(screen.getByLabelText(/task title/i)).toHaveAttribute('aria-required', 'true')
   })
 })

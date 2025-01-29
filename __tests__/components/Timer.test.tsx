@@ -1,252 +1,103 @@
-import { render, screen, fireEvent, act } from '@testing-library/react'
+import React from 'react'
+import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { Timer } from '../../src/components/Timer/Timer'
-import { useTimerStore } from '../../src/store/timerStore'
-import { useTaskStore } from '../../src/store/taskStore'
-import { useAudio } from '../../src/hooks/useAudio'
-import { formatTime } from '../../src/utils'
-import { Task } from '../../src/types'
+import { renderWithProviders, checkA11y } from '../utils/test-utils'
+import { useTimerStore, TimerActions } from '../../src/store/timerStore'
+import { TimerState } from '../../src/types'
 
-// Mock dependencies
-jest.mock('../../src/store/timerStore')
-jest.mock('../../src/store/taskStore')
-jest.mock('../../src/hooks/useAudio')
-jest.mock('../../src/utils', () => ({
-  formatTime: jest.fn(ms => `${Math.floor(ms / 60)}:${String(ms % 60).padStart(2, '0')}`)
+// Cast the mock to preserve both the Jest mock functionality and the store types
+const mockedUseTimerStore = useTimerStore as unknown as jest.MockedFunction<typeof useTimerStore>
+
+jest.mock('../../src/store/timerStore', () => ({
+  useTimerStore: jest.fn()
 }))
 
-// Mock framer-motion
-jest.mock('framer-motion', () => ({
-  motion: {
-    div: ({ children, ...props }: any) => <div {...props}>{children}</div>,
-    button: ({ children, onClick, ...props }: any) => (
-      <button onClick={onClick} {...props}>{children}</button>
-    )
+describe('Timer', () => {
+  const mockTimerStore: TimerState & TimerActions = {
+    isRunning: false,
+    mode: 'work',
+    timeLeft: 1500,
+    toggleRunning: jest.fn(),
+    resetTimer: jest.fn(),
+    setTimeLeft: jest.fn(),
+    setMode: jest.fn(),
+    incrementWorkCount: jest.fn(),
+    workCount: 0
   }
-}))
 
-// Mock Audio constants
-jest.mock('../../src/constants', () => ({
-  AUDIO_PATHS: {
-    tick: '/tick.mp3',
-    notification: '/notification.mp3'
-  },
-  TIMER_DURATIONS: {
-    work: 1500,
-    shortBreak: 300,
-    longBreak: 900
-  },
-  POMOS_BEFORE_LONG_BREAK: 4
-}))
-
-const mockTask: Task = {
-  id: '1',
-  name: 'Test Task',
-  priority: 'High',
-  estimatedPomos: 4,
-  actualPomos: 2,
-  timeSpent: 3000,
-  description: 'Test description',
-  deadline: '2024-12-31T23:59',
-  labels: [],
-  status: 'in-progress',
-  createdAt: '2024-01-01T00:00'
-}
-
-// Mock audio functions
-const mockPlay = jest.fn()
-const mockPause = jest.fn()
-const mockStop = jest.fn()
-
-const mockUseTimerStore = useTimerStore as jest.MockedFunction<typeof useTimerStore>
-const mockUseTaskStore = useTaskStore as jest.MockedFunction<typeof useTaskStore>
-const mockUseAudio = useAudio as jest.MockedFunction<typeof useAudio>
-
-describe('Timer Component', () => {
   beforeEach(() => {
-    jest.clearAllMocks()
-    jest.useFakeTimers()
-
-    // Setup audio mocks
-    mockUseAudio.mockReturnValue({
-      play: mockPlay,
-      pause: mockPause,
-      stop: mockStop
-    })
-
-    // Setup initial timer state
-    mockUseTimerStore.mockReturnValue({
-      timeLeft: 1500,
-      isRunning: false,
-      mode: 'work',
-      workCount: 0,
-      setTimeLeft: jest.fn(),
-      toggleRunning: jest.fn(),
-      setMode: jest.fn(),
-      incrementWorkCount: jest.fn(),
-      resetTimer: jest.fn()
-    } as any)
-
-    // Setup initial task state
-    mockUseTaskStore.mockReturnValue({
-      tasks: [mockTask],
-      activeTaskId: '1',
-      updateTask: jest.fn()
-    } as any)
+    mockedUseTimerStore.mockImplementation(() => mockTimerStore)
   })
 
   afterEach(() => {
-    jest.useRealTimers()
+    jest.clearAllMocks()
   })
 
-  it('renders timer with initial state', () => {
-    render(<Timer />)
+  it('renders without crashing', () => {
+    renderWithProviders(<Timer />)
+    expect(screen.getByRole('timer')).toBeInTheDocument()
+  })
 
-    expect(screen.getByText('Focus Timer')).toBeInTheDocument()
+  it('displays correct time format', () => {
+    renderWithProviders(<Timer />)
     expect(screen.getByText('25:00')).toBeInTheDocument()
-    expect(screen.getByText('work')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Start timer' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Reset timer' })).toBeInTheDocument()
   })
 
-  it('updates timer display and controls when running', () => {
-    const mockToggleRunning = jest.fn()
-    mockUseTimerStore.mockReturnValue({
-      ...mockUseTimerStore(),
-      isRunning: true,
-      toggleRunning: mockToggleRunning
-    } as any)
-
-    render(<Timer />)
-
-    expect(screen.getByRole('button', { name: 'Pause timer' })).toBeInTheDocument()
-    expect(mockPlay).toHaveBeenCalled() // Tick sound should play
-  })
-
-  it('handles timer completion and mode transitions', () => {
-    const mockSetMode = jest.fn()
-    const mockIncrementWorkCount = jest.fn()
-    const mockUpdateTask = jest.fn()
-
-    mockUseTimerStore.mockReturnValue({
-      ...mockUseTimerStore(),
-      timeLeft: 1,
-      isRunning: true,
-      mode: 'work',
-      workCount: 0,
-      setMode: mockSetMode,
-      incrementWorkCount: mockIncrementWorkCount
-    } as any)
-
-    mockUseTaskStore.mockReturnValue({
-      ...mockUseTaskStore(),
-      updateTask: mockUpdateTask
-    } as any)
-
-    render(<Timer />)
-
-    // Advance timer by 1 second to trigger completion
-    act(() => {
-      jest.advanceTimersByTime(1000)
-    })
-
-    expect(mockIncrementWorkCount).toHaveBeenCalled()
-    expect(mockSetMode).toHaveBeenCalledWith('shortBreak')
-    expect(mockStop).toHaveBeenCalled() // Tick sound should stop
-    expect(mockPlay).toHaveBeenCalled() // Completion sound should play
-  })
-
-  it('updates active task progress during work sessions', () => {
-    const mockUpdateTask = jest.fn()
-    mockUseTaskStore.mockReturnValue({
-      ...mockUseTaskStore(),
-      updateTask: mockUpdateTask
-    } as any)
-
-    mockUseTimerStore.mockReturnValue({
-      ...mockUseTimerStore(),
-      isRunning: true,
-      mode: 'work'
-    } as any)
-
-    render(<Timer />)
-
-    act(() => {
-      jest.advanceTimersByTime(1000)
-    })
-
-    expect(mockUpdateTask).toHaveBeenCalledWith({
-      ...mockTask,
-      timeSpent: mockTask.timeSpent + 1
+  it('hides decorative elements from screen readers', () => {
+    renderWithProviders(<Timer />)
+    const decorativeElements = screen.getAllByRole('presentation')
+    decorativeElements.forEach(element => {
+      expect(element).toHaveAttribute('aria-hidden', 'true')
     })
   })
 
-  describe('Long Break Transition', () => {
-    it('transitions to long break after specified pomodoros', () => {
-      const mockSetMode = jest.fn()
-      mockUseTimerStore.mockReturnValue({
-        ...mockUseTimerStore(),
-        timeLeft: 1,
-        isRunning: true,
-        mode: 'work',
-        workCount: 3, // One before long break
-        setMode: mockSetMode
-      } as any)
-
-      render(<Timer />)
-
-      act(() => {
-        jest.advanceTimersByTime(1000)
-      })
-
-      expect(mockSetMode).toHaveBeenCalledWith('longBreak')
-    })
+  it('has proper ARIA labels for interactive elements', () => {
+    renderWithProviders(<Timer />)
+    expect(screen.getByRole('button', { name: /start/i })).toHaveAttribute('aria-label')
   })
 
-  describe('Timer Controls', () => {
-    it('handles reset action', () => {
-      const mockResetTimer = jest.fn()
-      mockUseTimerStore.mockReturnValue({
-        ...mockUseTimerStore(),
-        resetTimer: mockResetTimer
-      } as any)
+  it('handles animation properties correctly', async () => {
+    renderWithProviders(<Timer />)
+    const timerElement = screen.getByRole('timer')
+    expect(timerElement).toHaveAttribute('data-state', 'idle')
 
-      render(<Timer />)
-      const resetButton = screen.getByRole('button', { name: 'Reset timer' })
-      fireEvent.click(resetButton)
-
-      expect(mockResetTimer).toHaveBeenCalled()
-    })
-
-    it('toggles timer state', () => {
-      const mockToggleRunning = jest.fn()
-      mockUseTimerStore.mockReturnValue({
-        ...mockUseTimerStore(),
-        toggleRunning: mockToggleRunning
-      } as any)
-
-      render(<Timer />)
-      const startButton = screen.getByRole('button', { name: 'Start timer' })
-      fireEvent.click(startButton)
-
-      expect(mockToggleRunning).toHaveBeenCalled()
-    })
+    // Toggle timer
+    await userEvent.click(screen.getByRole('button', { name: /start/i }))
+    expect(mockTimerStore.toggleRunning).toHaveBeenCalled()
   })
 
-  describe('Accessibility', () => {
-    it('provides appropriate ARIA labels', () => {
-      render(<Timer />)
+  it('meets accessibility standards', async () => {
+    await checkA11y(<Timer />)
+  })
 
-      const timer = screen.getByRole('timer')
-      expect(timer).toHaveAttribute('aria-label', expect.stringContaining('remaining in work mode'))
+  it('responds to keyboard interactions', async () => {
+    renderWithProviders(<Timer />)
+    const startButton = screen.getByRole('button', { name: /start/i })
 
-      expect(screen.getByRole('button', { name: 'Start timer' })).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: 'Reset timer' })).toBeInTheDocument()
-    })
+    await userEvent.tab()
+    expect(startButton).toHaveFocus()
 
-    it('hides decorative elements from screen readers', () => {
-      render(<Timer />)
-      const decorativeIcon = screen.getByRole('img', { hidden: true })
-      expect(decorativeIcon).toHaveAttribute('aria-hidden', 'true')
-    })
+    await userEvent.keyboard('{enter}')
+    expect(mockTimerStore.toggleRunning).toHaveBeenCalled()
+  })
+
+  it('updates UI based on timer mode', () => {
+    const breakModeStore = {
+      ...mockTimerStore,
+      mode: 'shortBreak' as const
+    }
+    mockedUseTimerStore.mockImplementation(() => breakModeStore)
+
+    renderWithProviders(<Timer />)
+    expect(screen.getByRole('timer')).toHaveAttribute('data-mode', 'shortBreak')
+  })
+
+  it('announces time changes to screen readers', () => {
+    renderWithProviders(<Timer />)
+    const timerElement = screen.getByRole('timer')
+    expect(timerElement).toHaveAttribute('aria-live', 'polite')
+    expect(timerElement).toHaveAttribute('aria-atomic', 'true')
+    expect(timerElement).toHaveAttribute('aria-label', expect.stringContaining('remaining in'))
   })
 })

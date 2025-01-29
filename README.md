@@ -1,168 +1,98 @@
-# Enhanced Pomodoro Timer
+## Spotify Integration Setup
+# Pomodoro Timer with Focus Music
 
-A full-featured Pomodoro timer application built with Next.js, TypeScript, and modern React patterns.
+A Pomodoro timer application with Spotify integration for focus music.
 
 ## Features
 
-### Timer Functions
-- Customizable work/break intervals
-- Visual countdown timer with progress indicator
-- Audio notifications for timer completion
-- Volume control for notifications
-- Browser notifications support
+- 🕒 Pomodoro Timer
+  - Work sessions (25 minutes)
+  - Short breaks (5 minutes)
+  - Long breaks (15 minutes)
+  - Visual progress indicator
+  - Task tracking with estimated and actual pomodoros
 
-### Task Management
-- Create, edit, and delete tasks
-- Set task priorities and deadlines
-- Track estimated vs. actual Pomodoros
-- Filter and sort tasks by various criteria
-- Google Calendar integration
-- Task completion tracking
+- 🎵 Focus Music Integration
+  - Spotify track search
+  - Featured playlist integration
+  - Volume control through settings
+  - Audio preview for tracks
 
-### Analytics
-- Productivity score calculation
-- Task completion trends
-- Time tracking statistics
-- Visual charts and graphs
-- Task distribution analysis
+## Setup
 
-### User Experience
-- Dark/Light theme support
-- Keyboard shortcuts
-- Toast notifications
-- Responsive design
-- Accessibility features
-- Error boundaries for stability
-
-## Technical Improvements
-
-### State Management
-- Zustand for global state
-- Persistent storage with zustand/middleware
-- Type-safe state management
-- Optimized re-renders
-
-### Code Organization
-- Component-based architecture
-- Custom hooks for logic separation
-- TypeScript interfaces and types
-- Constants and utilities separation
-- Barrel exports for clean imports
-
-### Performance
-- Memoization with useMemo and useCallback
-- React.memo for component optimization
-- Efficient list rendering with keys
-- Lazy loading where appropriate
-- Optimized event handlers
-
-### Error Handling
-- Error boundaries for component isolation
-- TypeScript type guards
-- Input validation
-- Try-catch blocks for async operations
-- User-friendly error messages
-
-### Accessibility
-- ARIA labels and roles
-- Keyboard navigation support
-- Screen reader compatibility
-- Color contrast compliance
-- Focus management
-
-### Development Experience
-- ESLint configuration
-- TypeScript strict mode
-- Component documentation
-- Code organization
-- Development tools setup
-
-## Keyboard Shortcuts
-
-- `Space` - Start/Pause Timer
-- `Esc` - Reset Timer
-- `N` - New Task
-- `F` - Focus Next Task
-
-## Project Structure
-
-```
-src/
-  ├── components/          # React components
-  │   ├── Analytics/
-  │   ├── ErrorBoundary/
-  │   ├── Task/
-  │   ├── Timer/
-  │   ├── Toast/
-  │   └── index.ts        # Barrel exports
-  ├── hooks/              # Custom React hooks
-  ├── store/              # Zustand stores
-  ├── types/              # TypeScript types
-  ├── utils/              # Helper functions
-  └── constants/          # Configuration constants
-
-pages/                    # Next.js pages
-styles/                   # Global styles
-public/                   # Static assets
-```
-
-## Setup and Development
-
-1. Clone the repository
-2. Install dependencies:
+1. Install dependencies:
    ```bash
    npm install
    ```
-3. Run development server:
+
+2. Set up Spotify API credentials:
+   - Go to https://developer.spotify.com/dashboard
+   - Log in with your Spotify account
+   - Click "Create app"
+   - Fill in app details:
+     - App name: "Pomodoro Focus Music"
+     - App description: "Music integration for Pomodoro timer"
+     - Redirect URI: "http://localhost:3000"
+     - Select "Web API"
+   - After creation, get the Client ID and Client Secret
+   - Create a `.env.local` file with:
+     ```
+     NEXT_PUBLIC_SPOTIFY_CLIENT_ID=your_client_id_here
+     SPOTIFY_CLIENT_SECRET=your_client_secret_here
+     ```
+
+3. Run the development server:
    ```bash
    npm run dev
    ```
 
-## Building for Production
+4. Open http://localhost:3000 in your browser
 
-```bash
-npm run build
-npm start
-```
+## Recent Updates
+- Fixed timer progress circle calculation
+- Updated package dependencies to stable versions
+- Improved audio management with custom hook
+- Enhanced Spotify integration UI
 
-## Environment Variables
+To enable Spotify track search functionality:
 
-- None required for basic functionality
-- Optional: Configure your own Google Calendar API keys for calendar integration
+1. Go to [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)
+2. Create a new application or select an existing one
+3. Get your Client ID and Client Secret from the app settings
+4. Create a `.env.local` file in the root directory and add:
+   ```
+   NEXT_PUBLIC_SPOTIFY_CLIENT_ID=your_spotify_client_id_here
+   SPOTIFY_CLIENT_SECRET=your_spotify_client_secret_here
+   ```
+5. Replace the placeholder values with your actual Spotify API credentials
+6. Restart your development server for the changes to take effect
 
-## Accessibility
+### Features
+- Search for tracks in real-time as you type
+- View track details including artist and album art
+- Play preview clips when available (30 seconds)
 
-This application follows WCAG 2.1 guidelines and includes:
-- Proper heading hierarchy
-- ARIA labels and roles
-- Keyboard navigation
-- Screen reader support
-- Sufficient color contrast
-- Focus management
-- Alternative text for images
+### Troubleshooting
 
-## Browser Support
+If you encounter issues:
 
-- Modern browsers (Chrome, Firefox, Safari, Edge)
-- Responsive design for mobile devices
-- Progressive Web App capabilities
+1. Verify your credentials:
+   - Make sure both CLIENT_ID and CLIENT_SECRET are correctly copied from Spotify
+   - Check that there are no extra spaces in your .env.local file
+   - Ensure the .env.local file is in the root directory
 
-## Contributing
+2. Common errors:
+   - "Missing Spotify credentials": Check your .env.local file setup
+   - "Failed to authenticate": Verify your credentials are correct
+   - "API rate limit exceeded": Spotify has rate limits for free tier:
+     * 30 requests per second
+     * 3,600 requests per hour
+     * Implement caching if needed for heavy usage
 
-1. Fork the repository
-2. Create your feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
+3. Development tips:
+   - Check the browser console and server logs for detailed error messages
+   - The search is debounced (300ms) to prevent API spam
+   - Preview playback requires user interaction due to browser policies
+   - Album art uses Spotify's CDN (i.scdn.co) which is configured in next.config.js
 
-## License
-
-MIT License - feel free to use this code for your own projects.
-
-## Acknowledgments
-
-- Next.js documentation
-- React documentation
-- Zustand documentation
-- TypeScript documentation
-- Tailwind CSS documentation
+For more details, see the [Spotify Web API Documentation](https://developer.spotify.com/documentation/web-api)

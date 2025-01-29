@@ -8,9 +8,9 @@ export const POMOS_BEFORE_LONG_BREAK = 4
 
 export const NOTIFICATION_DURATION = 5000 // 5 seconds in milliseconds
 
-export const TASK_PRIORITIES = ['High', 'Medium', 'Low'] as const
+export const TASK_PRIORITIES = Object.freeze(['High', 'Medium', 'Low'] as const)
 
-export const TASK_STATUS = ['todo', 'in-progress', 'completed'] as const
+export const TASK_STATUS = Object.freeze(['todo', 'in-progress', 'completed'] as const)
 
 export const AUDIO_PATHS = {
   tick: '/tick.mp3',
@@ -38,9 +38,9 @@ export const ERROR_MESSAGES = {
 export const THEME = {
   colors: {
     primary: 'indigo',
-    error: 'red',
-    success: 'green',
-    warning: 'yellow'
+    error: '#dc2626',
+    success: '#16a34a',
+    warning: '#ca8a04'
   },
   priorities: {
     High: 'red',

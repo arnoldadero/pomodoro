@@ -1,180 +1,153 @@
-import { useEffect, useMemo } from 'react'
+'use client'
+
+import React, { useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
-import { IconClock } from '@tabler/icons-react'
-import { useTimerStore } from '../../store/timerStore'
-import { useTaskStore } from '../../store/taskStore'
-import { useAudio } from '../../hooks/useAudio'
-import { AUDIO_PATHS, TIMER_DURATIONS, POMOS_BEFORE_LONG_BREAK } from '../../constants'
-import { formatTime } from '../../utils'
+import { useTimerStore } from '@/store/timerStore'
+import { TimerMode } from '@/types'
+import { useTaskStore } from '@/store/taskStore'
 
-export function Timer() {
-  const {
-    timeLeft,
-    isRunning,
-    mode,
-    workCount,
-    setTimeLeft,
-    toggleRunning,
-    setMode,
-    incrementWorkCount,
-    resetTimer
-  } = useTimerStore()
+function formatTime(seconds: number): string {
+  const minutes = Math.floor(seconds / 60)
+  const remainingSeconds = seconds % 60
+  return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`
+}
 
-  const { tasks, activeTaskId, updateTask } = useTaskStore()
+function getInitialDuration(mode: TimerMode): number {
+  switch (mode) {
+    case 'work':
+      return 25 * 60 // 25 minutes
+    case 'shortBreak':
+      return 5 * 60  // 5 minutes
+    case 'longBreak':
+      return 15 * 60 // 15 minutes
+    default:
+      return 25 * 60 // default to work duration
+  }
+}
 
-  const tickSound = useAudio({ src: AUDIO_PATHS.tick, loop: true })
-  const completionSound = useAudio({ src: AUDIO_PATHS.notification })
+const Timer = () => {
+  const { isRunning, mode, timeLeft, setTimeLeft, toggleRunning: toggleTimer, resetTimer } = useTimerStore()
+  const { activeTaskId, tasks, updateTask } = useTaskStore()
 
-  // Memoize the timer progress calculation
-  const progress = useMemo(() => {
-    const totalDuration = TIMER_DURATIONS[mode]
-    return (timeLeft / totalDuration) * 283 // SVG circle circumference
-  }, [timeLeft, mode])
+  const activeTask = tasks.find(task => task.id === activeTaskId)
+
+  const tick = useCallback(() => {
+    if (timeLeft > 0) {
+      setTimeLeft(timeLeft - 1)
+      // Update time spent every second for the active task
+      if (isRunning && activeTask && mode === 'work') {
+        const updatedTask = {
+          ...activeTask,
+          timeSpent: activeTask.timeSpent + 1
+        }
+        updateTask(updatedTask)
+      }
+    } else {
+      toggleTimer()
+      // When a work session completes, update the pomodoro count
+      if (mode === 'work' && activeTask) {
+        const updatedTask = {
+          ...activeTask,
+          actualPomos: activeTask.actualPomos + 1
+        }
+        updateTask(updatedTask)
+      }
+    }
+  }, [timeLeft, setTimeLeft, toggleTimer, mode, activeTask, updateTask, isRunning])
 
   useEffect(() => {
-    let interval: NodeJS.Timeout
-
-    if (isRunning) {
-      tickSound.play()
-      interval = setInterval(() => {
-        setTimeLeft(timeLeft - 1)
-
-        // Update active task time if in work mode
-        if (activeTaskId && mode === 'work') {
-          const activeTask = tasks.find(task => task.id === activeTaskId)
-          if (activeTask) {
-            updateTask({
-              ...activeTask,
-              timeSpent: activeTask.timeSpent + 1
-            })
-          }
-        }
-
-        // Handle timer completion
-        if (timeLeft <= 1) {
-          tickSound.stop()
-          completionSound.play()
-
-          if (mode === 'work') {
-            incrementWorkCount()
-            const shouldTakeLongBreak = workCount >= POMOS_BEFORE_LONG_BREAK - 1
-
-            // Update active task if exists
-            if (activeTaskId) {
-              const activeTask = tasks.find(task => task.id === activeTaskId)
-              if (activeTask) {
-                updateTask({
-                  ...activeTask,
-                  actualPomos: activeTask.actualPomos + 1,
-                  status: activeTask.actualPomos + 1 >= activeTask.estimatedPomos
-                    ? 'completed'
-                    : 'in-progress'
-                })
-              }
-            }
-
-            setMode(shouldTakeLongBreak ? 'longBreak' : 'shortBreak')
-          } else {
-            setMode('work')
-          }
-        }
-      }, 1000)
-    } else {
-      tickSound.pause()
+    let intervalId: NodeJS.Timeout
+    if (isRunning && timeLeft > 0) {
+      intervalId = setInterval(tick, 1000) // Update every second
     }
+    return () => clearInterval(intervalId)
+  }, [isRunning, timeLeft, tick])
 
-    return () => {
-      clearInterval(interval)
-      tickSound.pause()
-    }
-  }, [
-    isRunning,
-    timeLeft,
-    mode,
-    workCount,
-    activeTaskId,
-    tasks,
-    setTimeLeft,
-    setMode,
-    incrementWorkCount,
-    updateTask,
-    tickSound,
-    completionSound
-  ])
+  const containerVariants = {
+    idle: { scale: 1 },
+    running: { scale: [1, 1.02, 1], transition: { repeat: Infinity, duration: 2 } }
+  }
+
+  const buttonVariants = {
+    idle: { scale: 1 },
+    hover: { scale: 1.05 },
+    tap: { scale: 0.95 }
+  }
+
+  const progressPercentage = (timeLeft / getInitialDuration(mode)) * 100
 
   return (
-    <motion.div
-      className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-xl"
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
+    <div
+      className="flex flex-col items-center justify-center gap-4"
+      role="region"
+      aria-label={`${mode} timer${activeTask ? ` for ${activeTask.name}` : ''}`}
     >
-      <div className="flex flex-col items-center space-y-6">
-        <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400">
-          <IconClock size={24} aria-hidden="true" />
-          <h1 className="text-2xl font-bold">Focus Timer</h1>
+      {activeTask && (
+        <div className="text-lg font-medium text-gray-700">
+          {activeTask.name} ({activeTask.actualPomos}/{activeTask.estimatedPomos} Pomos)
         </div>
-
-        <div className="relative w-64 h-64" role="timer" aria-label={`${formatTime(timeLeft)} remaining in ${mode} mode`}>
-          <svg className="w-full h-full" viewBox="0 0 100 100" aria-hidden="true">
-            <circle
-              className="text-gray-200 dark:text-gray-700"
-              strokeWidth="8"
-              stroke="currentColor"
-              fill="transparent"
-              r="46"
-              cx="50"
-              cy="50"
+      )}
+      <div className="flex flex-col items-center justify-center gap-6">
+        <motion.div
+          role="timer"
+          aria-live="polite"
+          aria-atomic="true"
+          aria-label={`${formatTime(timeLeft)} remaining in ${mode} mode`}
+          data-state={isRunning ? 'running' : 'idle'}
+          data-mode={mode}
+          variants={containerVariants}
+          animate={isRunning ? 'running' : 'idle'}
+          className="relative flex items-center justify-center w-64 h-64"
+        >
+          {/* Decorative circle */}
+          <div
+            role="presentation"
+            aria-hidden="true"
+            className="absolute inset-0 border-4 border-gray-200 rounded-full"
+          />
+          <div className="absolute inset-0 rounded-full overflow-hidden">
+            {/* Progress circle */}
+            <div
+              role="presentation"
+              aria-hidden="true"
+              className="absolute inset-0"
+              style={{
+                background: `conic-gradient(#4CAF50 ${progressPercentage}%, transparent 0)`
+              }}
             />
-            <circle
-              className="text-indigo-500 dark:text-indigo-400 transition-all duration-200"
-              strokeWidth="8"
-              strokeDasharray={`${progress} 283`}
-              strokeLinecap="round"
-              stroke="currentColor"
-              fill="transparent"
-              r="46"
-              cx="50"
-              cy="50"
-            />
-          </svg>
-
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <div className="text-4xl font-bold text-gray-800 dark:text-gray-200">
-              {formatTime(timeLeft)}
-            </div>
-            <div className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-              {mode.replace(/([A-Z])/g, ' $1').trim()}
-            </div>
           </div>
-        </div>
+
+          <span className="relative text-4xl font-bold z-10" aria-hidden="true">
+            {formatTime(timeLeft)}
+          </span>
+        </motion.div>
 
         <div className="flex gap-4">
           <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={toggleRunning}
-            className={`px-6 py-3 rounded-xl font-semibold transition-colors ${
-              isRunning
-                ? 'bg-red-500 hover:bg-red-600 text-white'
-                : 'bg-indigo-500 hover:bg-indigo-600 text-white'
-            }`}
+            variants={buttonVariants}
+            whileHover="hover"
+            whileTap="tap"
+            onClick={toggleTimer}
             aria-label={isRunning ? 'Pause timer' : 'Start timer'}
+            className="px-6 py-2 text-lg font-semibold text-white bg-green-500 rounded-lg hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
           >
             {isRunning ? 'Pause' : 'Start'}
           </motion.button>
 
           <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
+            variants={buttonVariants}
+            whileHover="hover"
+            whileTap="tap"
             onClick={resetTimer}
-            className="px-6 py-3 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-xl font-semibold transition-colors"
             aria-label="Reset timer"
+            className="px-6 py-2 text-lg font-semibold text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
           >
             Reset
           </motion.button>
         </div>
       </div>
-    </motion.div>
+    </div>
   )
 }
+
+export default Timer

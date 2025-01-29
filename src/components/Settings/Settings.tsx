@@ -1,3 +1,5 @@
+'use client'
+
 import { useCallback } from 'react'
 import { motion } from 'framer-motion'
 import {
@@ -11,7 +13,9 @@ import { useSettingsStore } from '../../store/settingsStore'
 import { useToast } from '../../hooks/useToast'
 import { requestNotificationPermission } from '../../utils'
 
-export function Settings() {
+interface SettingsProps {}
+
+const Settings: React.FC<SettingsProps> = () => {
   const {
     darkMode,
     volume,
@@ -60,10 +64,11 @@ export function Settings() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Theme Toggle */}
         <div className="space-y-2">
-          <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+          <label htmlFor="themeToggle" className="text-sm font-medium text-gray-700 dark:text-gray-300">
             Theme
           </label>
           <motion.button
+            id="themeToggle"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={toggleDarkMode}
@@ -135,10 +140,11 @@ export function Settings() {
 
         {/* Notification Permission */}
         <div className="space-y-2">
-          <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+          <label htmlFor="notificationToggle" className="text-sm font-medium text-gray-700 dark:text-gray-300">
             Browser Notifications
           </label>
           <motion.button
+            id="notificationToggle"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={handleRequestNotifications}
@@ -166,3 +172,5 @@ export function Settings() {
     </motion.div>
   )
 }
+
+export default Settings

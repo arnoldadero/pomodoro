@@ -16,37 +16,55 @@ export function formatTime(seconds: number): string {
   return `${remainingSeconds}s`
 }
 
+function ensureDate(date: string | null | Date): Date {
+  if (!date) {
+    throw new Error('Invalid date')
+  }
+  const parsed = new Date(date)
+  if (isNaN(parsed.getTime())) {
+    throw new Error('Invalid date format')
+  }
+  return parsed
+}
+
 export function formatDate(date: string | null | Date): string {
   if (!date) {
     return 'No date set'
   }
 
-  return new Date(date).toLocaleDateString('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
+  try {
+    return ensureDate(date).toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  } catch (error) {
+    return 'Invalid date format'
+  }
 }
 
 export function createCalendarUrl(task: Task): string {
-  if (!task.deadline) {
+  try {
+    if (!task.deadline) {
+      return '#'
+    }
+
+    const startDate = ensureDate(task.deadline)
+    const endDate = new Date(startDate.getTime() + 30 * 60000) // 30 minutes duration
+
+    const formatDateForCalendar = (date: Date) =>
+      date.toISOString().replace(/[-:]/g, '').split('.')[0]
+
+    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${
+      encodeURIComponent(task.name)
+    }&dates=${formatDateForCalendar(startDate)}/${formatDateForCalendar(endDate)}&details=${
+      encodeURIComponent(`Pomodoros: ${task.estimatedPomos}\n${task.description || ''}`)
+    }&location=Work Session`
+  } catch {
     return '#'
   }
-
-  const startDate = new Date(task.deadline)
-  const endDate = new Date(startDate.getTime() + 30 * 60000) // 30 minutes duration
-
-  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${
-    encodeURIComponent(task.name)
-  }&dates=${
-    startDate.toISOString().replace(/[-:]/g, '').split('.')[0]
-  }/${
-    endDate.toISOString().replace(/[-:]/g, '').split('.')[0]
-  }&details=${
-    encodeURIComponent(`Pomodoros: ${task.estimatedPomos}\n${task.description}`)
-  }&location=Work Session`
 }
 
 export function generateTaskStats(tasks: Task[]) {
@@ -61,10 +79,14 @@ export function generateTaskStats(tasks: Task[]) {
 }
 
 function calculateProductivityScore(tasks: Task[]): number {
-  if (tasks.length === 0) return 0
+  if (tasks.length === 0) {
+    return 0
+  }
 
   const completedTasks = tasks.filter((t) => t.status === 'completed')
-  if (completedTasks.length === 0) return 0
+  if (completedTasks.length === 0) {
+    return 0
+  }
 
   const accuracyScores = completedTasks.map((task) => {
     const estimatedTime = task.estimatedPomos * 25 * 60
@@ -81,15 +103,34 @@ function calculateProductivityScore(tasks: Task[]): number {
 export function safeLocalStorage() {
   return {
     getItem: <T>(key: string, defaultValue: T): T => {
+      if (typeof key !== 'string') {
+        console.error('Invalid key type:', typeof key)
+        return defaultValue
+      }
+
       try {
         const item = localStorage.getItem(key)
-        return item ? (JSON.parse(item) as T) : defaultValue
+        if (!item) {
+          return defaultValue
+        }
+
+        try {
+          return JSON.parse(item) as T
+        } catch (parseError) {
+          console.error('Error parsing localStorage item:', parseError)
+          return defaultValue
+        }
       } catch (error) {
         console.error('Error reading from localStorage:', error)
         return defaultValue
       }
     },
     setItem: (key: string, value: unknown): void => {
+      if (typeof key !== 'string') {
+        console.error('Invalid key type:', typeof key)
+        return
+      }
+
       try {
         localStorage.setItem(key, JSON.stringify(value))
       } catch (error) {
@@ -97,6 +138,11 @@ export function safeLocalStorage() {
       }
     },
     removeItem: (key: string): void => {
+      if (typeof key !== 'string') {
+        console.error('Invalid key type:', typeof key)
+        return
+      }
+
       try {
         localStorage.removeItem(key)
       } catch (error) {

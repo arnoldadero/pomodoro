@@ -1,29 +1,43 @@
+'use client'
+
 import { useMemo, useCallback, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   IconListCheck,
   IconCalendarEvent,
   IconTrash,
-  IconPlayerPlay
+  IconPlayerPlay,
+  IconPlayerPause,
+  IconPlayerStop,
+  IconClock
 } from '@tabler/icons-react'
 import { useTaskStore } from '../../store/taskStore'
 import { useTimerStore } from '../../store/timerStore'
 import { useToast } from '../../hooks/useToast'
 import { formatTime, formatDate, createCalendarUrl } from '../../utils'
 import { TASK_STATUS } from '../../constants'
+import { Task } from '../../types'
 
 type SortField = 'deadline' | 'priority' | 'estimatedPomos'
 type SortOrder = 'asc' | 'desc'
 type FilterStatus = typeof TASK_STATUS[number] | 'all'
 
+const PRIORITY_ORDER: Record<string, number> = { High: 3, Medium: 2, Low: 1 }
+
 export function TaskList() {
   const { tasks, activeTaskId, setActiveTask, removeTask } = useTaskStore()
-  const { isRunning, toggleRunning } = useTimerStore()
+  const { isRunning, toggleRunning, resetTimer } = useTimerStore()
   const { addToast } = useToast()
 
   const [sortField, setSortField] = useState<SortField>('deadline')
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc')
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all')
+
+  const handleStopTask = useCallback(() => {
+    setActiveTask(null)
+    resetTimer()
+    addToast('Timer stopped and reset', 'success')
+  }, [setActiveTask, resetTimer, addToast])
 
   const handleSort = useCallback((field: SortField) => {
     if (sortField === field) {
@@ -39,24 +53,46 @@ export function TaskList() {
 
     // Apply status filter
     if (filterStatus !== 'all') {
-      filteredTasks = tasks.filter(task => task.status === filterStatus)
+      filteredTasks = filteredTasks.filter(task => task.status === filterStatus)
     }
 
     // Apply sorting
-    return [...filteredTasks].sort((a, b) => {
+    return [...filteredTasks].sort((a: Task, b: Task) => {
       let comparison = 0
 
       switch (sortField) {
         case 'deadline':
-          comparison = new Date(a.deadline || '').getTime() - new Date(b.deadline || '').getTime()
+          // Handle null dates by placing them at the end
+          if (!a.deadline && !b.deadline) {
+            comparison = 0
+          }
+          else if (!a.deadline) {
+            comparison = 1
+          }
+          else if (!b.deadline) {
+            comparison = -1
+          }
+          else {
+            comparison = new Date(a.deadline).getTime() - new Date(b.deadline).getTime()
+          }
           break
+
         case 'priority':
-          const priorityOrder = { High: 3, Medium: 2, Low: 1 }
-          comparison = (priorityOrder[a.priority] || 0) - (priorityOrder[b.priority] || 0)
+          // Use priority order map with fallback
+          const priorityA = PRIORITY_ORDER[a.priority] || 0
+          const priorityB = PRIORITY_ORDER[b.priority] || 0
+          comparison = priorityB - priorityA // Higher priority first
           break
+
         case 'estimatedPomos':
-          comparison = a.estimatedPomos - b.estimatedPomos
+          // Handle undefined or zero values
+          const pomosA = a.estimatedPomos || 0
+          const pomosB = b.estimatedPomos || 0
+          comparison = pomosA - pomosB
           break
+
+        default:
+          comparison = 0
       }
 
       return sortOrder === 'asc' ? comparison : -comparison
@@ -77,25 +113,35 @@ export function TaskList() {
     }
   }, [setActiveTask, isRunning, toggleRunning])
 
+  if (!tasks) {
+    return (
+      <div className="text-center text-gray-500 dark:text-gray-400 py-8">
+        Loading tasks...
+      </div>
+    )
+  }
+
   return (
     <motion.div
       className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-xl"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
+      role="region"
+      aria-label="Task List"
     >
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400">
             <IconListCheck size={24} aria-hidden="true" />
             <h2 className="text-xl font-bold">Task Queue</h2>
           </div>
 
-          <div className="flex gap-4">
+          <div className="flex flex-wrap gap-4">
             <select
               value={filterStatus}
               onChange={e => setFilterStatus(e.target.value as FilterStatus)}
-              className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 border-none"
+              className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 border-none focus:ring-2 focus:ring-indigo-500"
               aria-label="Filter tasks by status"
             >
               <option value="all">All Tasks</option>
@@ -108,18 +154,34 @@ export function TaskList() {
 
             <button
               onClick={() => handleSort('deadline')}
-              className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600"
+              className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 focus:ring-2 focus:ring-indigo-500"
               aria-label="Sort by deadline"
             >
-              By Deadline {sortField === 'deadline' && (sortOrder === 'asc' ? '↑' : '↓')}
+              <span className="flex items-center gap-1">
+                <IconCalendarEvent size={20} aria-hidden="true" />
+                By Deadline {sortField === 'deadline' && (sortOrder === 'asc' ? '↑' : '↓')}
+              </span>
             </button>
 
             <button
               onClick={() => handleSort('priority')}
-              className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600"
+              className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 focus:ring-2 focus:ring-indigo-500"
               aria-label="Sort by priority"
             >
-              By Priority {sortField === 'priority' && (sortOrder === 'asc' ? '↑' : '↓')}
+              <span className="flex items-center gap-1">
+                Priority {sortField === 'priority' && (sortOrder === 'asc' ? '↑' : '↓')}
+              </span>
+            </button>
+
+            <button
+              onClick={() => handleSort('estimatedPomos')}
+              className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 focus:ring-2 focus:ring-indigo-500"
+              aria-label="Sort by estimated pomodoros"
+            >
+              <span className="flex items-center gap-1">
+                <IconClock size={20} aria-hidden="true" />
+                Est. Pomos {sortField === 'estimatedPomos' && (sortOrder === 'asc' ? '↑' : '↓')}
+              </span>
             </button>
           </div>
         </div>
@@ -150,12 +212,13 @@ export function TaskList() {
                             ? 'bg-yellow-500'
                             : 'bg-green-500'
                         }`}
+                        role="img"
                         aria-label={`Priority: ${task.priority}`}
                       />
                       <h3 className="font-semibold text-gray-800 dark:text-gray-200">
                         {task.name}
                       </h3>
-                      <span className="text-sm text-gray-500 dark:text-gray-400">
+                      <span className="text-sm text-gray-500 dark:text-gray-400" aria-label={`Progress: ${task.actualPomos} of ${task.estimatedPomos} pomodoros completed`}>
                         ({task.actualPomos}/{task.estimatedPomos} pomos)
                       </span>
                     </div>
@@ -163,7 +226,9 @@ export function TaskList() {
                     {task.deadline && (
                       <div className="flex items-center gap-2 mt-2 text-sm text-gray-600 dark:text-gray-400">
                         <IconCalendarEvent size={16} aria-hidden="true" />
-                        {formatDate(task.deadline)}
+                        <span aria-label={`Deadline: ${formatDate(task.deadline)}`}>
+                          {formatDate(task.deadline)}
+                        </span>
                       </div>
                     )}
                   </div>
@@ -173,25 +238,48 @@ export function TaskList() {
                       <span className="text-sm text-gray-600 dark:text-gray-400">
                         Time Spent
                       </span>
-                      <span className="font-medium text-indigo-600 dark:text-indigo-400">
+                      <span className="font-medium text-indigo-600 dark:text-indigo-400" aria-label={`Time spent: ${formatTime(task.timeSpent)}`}>
                         {formatTime(task.timeSpent)}
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <motion.button
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => handleFocusTask(task.id)}
-                        className={`p-2 rounded-lg ${
-                          activeTaskId === task.id
-                            ? 'bg-indigo-600 text-white'
-                            : 'bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500'
-                        }`}
-                        aria-label={activeTaskId === task.id ? 'Current focus task' : 'Focus on this task'}
-                      >
-                        <IconPlayerPlay size={20} />
-                      </motion.button>
+                    <div className="flex items-center gap-2 ml-auto">
+                      {activeTaskId === task.id ? (
+                        <div className="flex items-center gap-2">
+                          <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={toggleRunning}
+                            className="p-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700"
+                            aria-label={isRunning ? 'Pause timer' : 'Resume timer'}
+                          >
+                            {isRunning ? (
+                              <IconPlayerPause size={20} aria-hidden="true" />
+                            ) : (
+                              <IconPlayerPlay size={20} aria-hidden="true" />
+                            )}
+                          </motion.button>
+                          <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={handleStopTask}
+                            className="p-2 rounded-lg bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500"
+                            aria-label="Stop timer"
+                          >
+                            <IconPlayerStop size={20} aria-hidden="true" />
+                          </motion.button>
+                        </div>
+                      ) : (
+                        <motion.button
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => handleFocusTask(task.id)}
+                          className="p-2 rounded-lg bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500"
+                          aria-label="Focus on this task"
+                        >
+                          <IconPlayerPlay size={20} aria-hidden="true" />
+                        </motion.button>
+                      )}
 
                       {task.deadline && (
                         <motion.a
@@ -203,7 +291,7 @@ export function TaskList() {
                           className="p-2 bg-green-100 dark:bg-green-900 hover:bg-green-200 dark:hover:bg-green-800 rounded-lg"
                           aria-label="Add to calendar"
                         >
-                          <IconCalendarEvent size={20} />
+                          <IconCalendarEvent size={20} aria-hidden="true" />
                         </motion.a>
                       )}
 
@@ -214,7 +302,7 @@ export function TaskList() {
                         className="p-2 bg-red-100 dark:bg-red-900 hover:bg-red-200 dark:hover:bg-red-800 rounded-lg"
                         aria-label="Delete task"
                       >
-                        <IconTrash size={20} />
+                        <IconTrash size={20} aria-hidden="true" />
                       </motion.button>
                     </div>
                   </div>
@@ -224,8 +312,8 @@ export function TaskList() {
           </AnimatePresence>
 
           {sortedAndFilteredTasks.length === 0 && (
-            <div className="text-center text-gray-500 dark:text-gray-400 py-8">
-              No tasks found. Add some tasks to get started!
+            <div className="text-center text-gray-500 dark:text-gray-400 py-8" role="status">
+              <p>No tasks found. Add some tasks to get started!</p>
             </div>
           )}
         </div>

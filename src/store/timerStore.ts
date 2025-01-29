@@ -27,7 +27,7 @@ export const useTimerStore = create<TimerState & TimerActions>((set) => ({
   workCount: 0,
   setTimeLeft: (time: number) => set({ timeLeft: time }),
   toggleRunning: () => set((state) => ({ isRunning: !state.isRunning })),
-  setMode: (mode: TimerMode) => set({ mode: mode, timeLeft: getInitialTime(mode) }),
+  setMode: (mode: TimerMode) => set({ mode, timeLeft: getInitialTime(mode) }),
   incrementWorkCount: () => set((state) => ({ workCount: state.workCount + 1 })),
   resetTimer: () => set((state) => ({ timeLeft: getInitialTime(state.mode), isRunning: false }))
 }))

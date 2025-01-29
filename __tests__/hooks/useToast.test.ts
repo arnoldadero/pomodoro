@@ -9,6 +9,7 @@ describe('useToast', () => {
 
   afterEach(() => {
     jest.useRealTimers()
+    jest.clearAllTimers()
   })
 
   describe('adding toasts', () => {
@@ -75,7 +76,7 @@ describe('useToast', () => {
   })
 
   describe('removing toasts', () => {
-    it('should remove a specific toast', () => {
+    it('should remove a specific toast and clear its timer', () => {
       const { result } = renderHook(() => useToast())
       let toastId: number
 
@@ -83,11 +84,18 @@ describe('useToast', () => {
         toastId = result.current.addToast('Test message')
       })
 
-      const toasts = result.current.toasts
-      expect(toasts).toHaveLength(1)
+      expect(result.current.toasts).toHaveLength(1)
 
+      // Remove before auto-dismiss
       act(() => {
         result.current.removeToast(toastId)
+      })
+
+      expect(result.current.toasts).toHaveLength(0)
+
+      // Advance time to verify timer was cleared
+      act(() => {
+        jest.advanceTimersByTime(5000)
       })
 
       expect(result.current.toasts).toHaveLength(0)
@@ -109,7 +117,7 @@ describe('useToast', () => {
       expect(result.current.toasts).toHaveLength(0)
     })
 
-    it('should clear all toasts', () => {
+    it('should clear all toasts and their timers', () => {
       const { result } = renderHook(() => useToast())
 
       act(() => {
@@ -122,6 +130,13 @@ describe('useToast', () => {
 
       act(() => {
         result.current.clearToasts()
+      })
+
+      expect(result.current.toasts).toHaveLength(0)
+
+      // Advance time to verify all timers were cleared
+      act(() => {
+        jest.advanceTimersByTime(5000)
       })
 
       expect(result.current.toasts).toHaveLength(0)
@@ -159,16 +174,18 @@ describe('useToast', () => {
     it('should handle multiple auto-dismissals correctly', () => {
       const { result } = renderHook(() => useToast())
 
+      // Add toasts with a delay
       act(() => {
         result.current.addToast('First')
+        jest.advanceTimersByTime(2000) // Advance 2 seconds
         result.current.addToast('Second')
       })
 
       expect(result.current.toasts).toHaveLength(2)
 
-      // Advance time for first toast
+      // Advance time for first toast (3 more seconds)
       act(() => {
-        jest.advanceTimersByTime(5000)
+        jest.advanceTimersByTime(3000)
       })
 
       const remainingToasts = result.current.toasts
@@ -176,12 +193,32 @@ describe('useToast', () => {
       const lastToast = remainingToasts[0]
       expect(lastToast?.message).toBe('Second')
 
-      // Advance time for second toast
+      // Advance time for second toast (5 seconds)
       act(() => {
         jest.advanceTimersByTime(5000)
       })
 
       expect(result.current.toasts).toHaveLength(0)
+    })
+
+    it('should cleanup timers on unmount', () => {
+      const { result, unmount } = renderHook(() => useToast())
+
+      act(() => {
+        result.current.addToast('Test message')
+      })
+
+      expect(result.current.toasts).toHaveLength(1)
+
+      // Unmount the hook
+      unmount()
+
+      // Advance time
+      act(() => {
+        jest.advanceTimersByTime(5000)
+      })
+
+      // No errors should occur from attempting to update unmounted component
     })
   })
 })

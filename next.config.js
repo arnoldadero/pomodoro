@@ -1,7 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  swcMinify: true,
   // Optimizations
   compiler: {
     // Remove console.* in production
@@ -9,12 +8,11 @@ const nextConfig = {
   },
   // Image optimization
   images: {
-    domains: [],
+    domains: ['i.scdn.co'], // Allow Spotify image domains
     formats: ['image/avif', 'image/webp'],
   },
   // Progressive Web App
   experimental: {
-    optimizeFonts: true,
     scrollRestoration: true,
   },
   // Disable X-Powered-By header
@@ -47,6 +45,11 @@ const nextConfig = {
       }
     }
     return config
+  },
+  // Environment variables
+  env: {
+    NEXT_PUBLIC_SPOTIFY_CLIENT_ID: process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID,
+    SPOTIFY_CLIENT_SECRET: process.env.SPOTIFY_CLIENT_SECRET,
   },
 }
 
